@@ -1,6 +1,9 @@
 [package]
-name = "JumpGame"
+name = "jump-jump"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
+bevy_hanabi = "0.14"
+rand = "0.8"
+bevy = { version = "0.15", features = ["mp3"]}
