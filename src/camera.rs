@@ -1,4 +1,3 @@
-use crate::player::{FallState, JumpState, Player, INITIAL_PLAYER_POS};
 use bevy::core_pipeline::bloom::Bloom;
 use bevy::prelude::*;
 

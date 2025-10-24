@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use crate::player::{JumpState, INITIAL_PLAYER_POS};
+
 /// 游戏状态枚举，控制游戏流程的不同阶段
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Default, States)]
 pub enum GameState {
@@ -160,7 +160,7 @@ pub fn setup_game_over_menu(mut commands: Commands, asset_server: Res<AssetServe
                                     align_items: AlignItems::Center,
                                     ..default()
                                 },
-                                ImageNode::new(asset_server.load("texture/btn_home.png")),
+                                ImageNode::new(asset_server.load("image/btn_home.png")),
                                 MenuButtonAction::BackToMainMenu, // 按钮功能标记
                             ));
 
