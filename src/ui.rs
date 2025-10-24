@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
+use crate::player::{JumpState, INITIAL_PLAYER_POS};
 
 /// 游戏状态枚举，控制游戏流程的不同阶段
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Default, States)]

@@ -3,6 +3,8 @@ use bevy::prelude::*;
 // 导入随机数生成库，用于随机生成平台属性
 use rand::Rng;
 
+// 导入玩家模块中的蓄力状态资源
+use crate::player::Accumulator;
 
 /// 标记组件：表示当前玩家站立的平台
 #[derive(Debug, Component)]

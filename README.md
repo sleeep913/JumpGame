@@ -34,18 +34,14 @@
 ```plaintext
 jump_game/
 ├── assets/                # 游戏资源
-│   ├── sprites/           # 精灵图（角色、平台、背景）
+│   ├── image/             # 素材图（角色、平台、背景、按钮）
 │   ├── sounds/            # 音效文件（跳跃、得分、失败）
 │   └── fonts/             # 字体文件（计分板显示）
 ├── src/
 │   ├── main.rs            # 程序入口
-│   ├── game/
-│   │   ├── mod.rs         # 游戏模块入口
-│   │   ├── player.rs      # 角色控制与跳跃逻辑
-│   │   ├── platform.rs    # 平台生成与管理
-│   │   ├── score.rs       # 计分系统与高分记录
-│   │   └── physics.rs     # 物理碰撞与运动处理
-│   ├── states.rs          # 游戏状态定义（开始/运行/结束）
+│   │── camera.rs          # 游戏模块入口
+│   │── player.rs          # 角色控制与跳跃逻辑
+│   │── platform.rs        # 平台生成与管理
 │   └── ui.rs              # 界面渲染（计分板、游戏结束弹窗）
 ├── Cargo.toml             # 依赖配置
 └── README.md              # 项目说明
