@@ -1,61 +1,39 @@
-// 导入音频相关组件，用于控制蓄力音效
 use bevy::audio::AudioSink;
-// 导入颜色调色板
 use bevy::color::palettes;
-// 导入Bevy主要组件
 use bevy::prelude::*;
-// 导入时间戳功能，用于蓄力计时
 use bevy::utils::Instant;
-// 导入粒子效果库
 use bevy_hanabi::prelude::*;
-// 导入数学常量
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
-// 导入平台相关组件
 use crate::platform::PlatformShape;
-// 导入UI相关组件和资源
 use crate::ui::{GameSounds, GameState, ScoreUpEvent, ScoreUpQueue};
 use crate::{
     platform::{CurrentPlatform, NextPlatform},
     ui::Score,
 };
 
-/// 玩家初始位置常量
-/// 设置在Y=1.5，使玩家正好站在平台上（平台顶面Y=1.0）
 pub const INITIAL_PLAYER_POS: Vec3 = Vec3::new(0.0, 1.5, 0.0);
 
-/// 蓄力状态资源
-/// 用于跟踪玩家跳跃前的蓄力过程
+// 蓄力
 #[derive(Debug, Resource)]
 pub struct Accumulator(pub Option<Instant>);
 
-/// 蓄力音效组件
-/// 标记正在播放的蓄力音效实体
 #[derive(Debug, Component)]
 pub struct AccumulationSound;
 
-/// 准备跳跃计时器
-/// 防止从主菜单进入游戏时立即跳跃
 #[derive(Debug, Resource)]
 pub struct PrepareJumpTimer(pub Timer);
 
-/// 跳跃状态资源
-/// 控制玩家跳跃动画和跳跃结果
+// 跳跃状态
 #[derive(Debug, Resource)]
 pub struct JumpState {
-    /// 跳跃起始位置
     pub start_pos: Vec3,
-    /// 跳跃目标位置
     pub end_pos: Vec3,
-    /// 跳跃动画持续时间（秒）
+    // 跳跃动画时长，秒
     pub animation_duration: f32,
-    /// 是否跳跃失败（落到平台外）
     pub falled: bool,
-    /// 跳跃动画是否完成
     pub completed: bool,
 }
-
-/// 为JumpState实现默认初始化
 impl Default for JumpState {
     fn default() -> Self {
         Self {
@@ -63,124 +41,472 @@ impl Default for JumpState {
             end_pos: Vec3::ZERO,
             animation_duration: 0.0,
             falled: false,
-            completed: true,  // 初始状态为已完成，允许跳跃
+            completed: true,
         }
     }
 }
-
 impl JumpState {
-    /// 开始跳跃动画
-    /// 
-    /// # 参数
-    /// - `start_pos`: 跳跃起始位置
-    /// - `end_pos`: 跳跃目标位置
-    /// - `animation_duration`: 动画持续时间
     pub fn animate_jump(&mut self, start_pos: Vec3, end_pos: Vec3, animation_duration: f32) {
         info!("Start jump!");
         self.start_pos = start_pos;
         self.end_pos = end_pos;
         self.animation_duration = animation_duration;
-        self.completed = false;  // 标记动画开始，未完成
+        self.completed = false;
     }
 }
 
-/// 摔落状态资源
-/// 控制玩家摔落动画和类型
+// 摔落状态
 #[derive(Debug, Resource)]
 pub struct FallState {
-    /// 摔落起始位置
     pub pos: Vec3,
-    /// 摔落类型（笔直或倾斜）
     pub fall_type: FallType,
-    /// 是否完成倾斜动作（仅在倾斜摔落时使用）
+    // 是否完成倾斜动作
     pub tilt_completed: bool,
-    /// 摔落动画是否完全完成
+    // 是否所有动作完成
     pub completed: bool,
-    /// 是否已经播放摔落音效
     pub played_sound: bool,
 }
-
-/// 摔落类型枚举
 #[derive(Debug)]
 pub enum FallType {
-    /// 笔直下落
+    // 笔直下落
     Straight,
-    /// 先倾斜再下落，Vec3代表倾斜方向
+    // 先倾斜再下落，Vec3代表倾斜方向
     Tilt(Vec3),
 }
-
-/// 为FallState实现默认初始化
 impl Default for FallState {
     fn default() -> Self {
         Self {
             pos: Vec3::ZERO,
             fall_type: FallType::Straight,
             tilt_completed: true,
-            completed: true,  // 初始状态为已完成，不影响游戏逻辑
-            played_sound: true,  // 初始状态为已播放，避免误触发音效
+            completed: true,
+            played_sound: true,
         }
     }
 }
-
 impl FallState {
-    /// 开始笔直摔落动画
-    /// 
-    /// # 参数
-    /// - `pos`: 摔落起始位置
     pub fn animate_straight_fall(&mut self, pos: Vec3) {
         info!("Start straight fall!");
         self.pos = pos;
         self.fall_type = FallType::Straight;
-        self.completed = false;  // 标记动画开始
-        self.played_sound = false;  // 重置音效播放状态
+        self.completed = false;
+        self.played_sound = false;
     }
-    
-    /// 开始倾斜摔落动画（碰到平台边缘时使用）
-    /// 
-    /// # 参数
-    /// - `pos`: 摔落起始位置
-    /// - `direction`: 倾斜方向向量
     pub fn animate_tilt_fall(&mut self, pos: Vec3, direction: Vec3) {
         info!("Start tilt fall!");
         self.pos = pos;
         self.fall_type = FallType::Tilt(direction);
-        self.tilt_completed = false;  // 倾斜动作未完成
-        self.completed = false;  // 整体动画未完成
-        self.played_sound = false;  // 重置音效播放状态
+        self.tilt_completed = false;
+        self.completed = false;
+        self.played_sound = false;
     }
 }
 
-/// 玩家标记组件
-/// 用于标识和查询玩家实体
 #[derive(Debug, Component)]
 pub struct Player;
 
-/// 蓄力粒子效果生成计时器
-/// 控制蓄力时粒子效果的生成频率
 #[derive(Debug, Resource)]
 pub struct GenerateAccumulationParticleEffectTimer(pub Timer);
 
-/// 设置玩家实体
-/// 
-/// 创建玩家角色（一个粉色胶囊体）并播放游戏开始音效
 pub fn setup_player(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     game_sounds: Res<GameSounds>,
 ) {
-    // 创建玩家实体：一个粉色胶囊体
     commands.spawn((
-        Mesh3d(meshes.add(Capsule3d::new(0.2, 0.5).mesh())),  // 胶囊体：半径0.2，高度0.5
-        MeshMaterial3d(materials.add(Color::Srgba(palettes::css::PINK))),  // 粉色材质
-        Transform::from_translation(INITIAL_PLAYER_POS),  // 设置初始位置
-        Player,  // 添加玩家标记组件
+        Mesh3d(meshes.add(Capsule3d::new(0.2, 0.5).mesh())),
+        MeshMaterial3d(materials.add(Color::Srgba(palettes::css::PINK))),
+        Transform::from_translation(INITIAL_PLAYER_POS),
+        Player,
     ));
-    
-    // 播放游戏开始音效
     commands.spawn((
-        AudioPlayer(game_sounds.start.clone()),  // 使用开始游戏音效
-        PlaybackSettings::DESPAWN,  // 播放完成后自动销毁
+        AudioPlayer(game_sounds.start.clone()),
+        PlaybackSettings::DESPAWN,
     ));
 }
 
+pub fn player_jump(
+    mut commands: Commands,
+    buttons: Res<ButtonInput<MouseButton>>,
+    mut score: ResMut<Score>,
+    mut accumulator: ResMut<Accumulator>,
+    mut jump_state: ResMut<JumpState>,
+    mut fall_state: ResMut<FallState>,
+    mut score_up_queue: ResMut<ScoreUpQueue>,
+    prepare_jump_timer: Res<PrepareJumpTimer>,
+    time: Res<Time<Real>>,
+    game_sounds: Res<GameSounds>,
+    q_accumulation_sound: Query<&AudioSink, With<AccumulationSound>>,
+    q_player: Query<&Transform, With<Player>>,
+    q_current_platform: Query<(Entity, &Transform, &PlatformShape), With<CurrentPlatform>>,
+    q_next_platform: Query<(Entity, &Transform, &PlatformShape), With<NextPlatform>>,
+) {
+    if !prepare_jump_timer.0.finished() {
+        // 防止从主菜单点击进入Playing状态时立即跳一次
+        return;
+    }
+    // 如果上一跳未完成则忽略
+    if buttons.just_pressed(MouseButton::Left) && jump_state.completed && fall_state.completed {
+        // 开始蓄力
+        accumulator.0 = time.last_update();
+        commands.spawn((
+            AccumulationSound,
+            AudioPlayer(game_sounds.accumulation.clone()),
+            PlaybackSettings::LOOP,
+        ));
+    }
+    if buttons.just_released(MouseButton::Left)
+        && jump_state.completed
+        && fall_state.completed
+        && accumulator.0.is_some()
+    {
+        if q_next_platform.is_empty() {
+            warn!("There is no next platform");
+            return;
+        }
+        let (current_platform_entity, current_platform_transform, current_platform_shape) =
+            q_current_platform.single();
+        let (next_platform_entity, next_platform_transform, next_platform_shape) =
+            q_next_platform.single();
+        let player = q_player.single();
+
+        // 计算跳跃后的落点位置
+        let landing_pos = if (next_platform_transform.translation.x
+            - current_platform_transform.translation.x)
+            < 0.1
+        {
+            Vec3::new(
+                player.translation.x,
+                INITIAL_PLAYER_POS.y,
+                player.translation.z
+                    - 3.0 * accumulator.0.as_ref().unwrap().elapsed().as_secs_f32(),
+            )
+        } else {
+            Vec3::new(
+                player.translation.x
+                    + 3.0 * accumulator.0.as_ref().unwrap().elapsed().as_secs_f32(),
+                INITIAL_PLAYER_POS.y,
+                player.translation.z,
+            )
+        };
+        dbg!(player.translation);
+        dbg!(accumulator.0.as_ref().unwrap().elapsed().as_secs_f32());
+
+        // 跳跃动画时长随距离而变化
+        jump_state.animate_jump(
+            player.translation,
+            landing_pos,
+            (accumulator.0.as_ref().unwrap().elapsed().as_secs_f32() / 2.0).max(0.5),
+        );
+
+        // 蓄力极短，跳跃后仍在当前平台上
+        // 蓄力正常，跳跃到下一平台
+        if current_platform_shape
+            .is_landed_on_platform(current_platform_transform.translation, landing_pos)
+            || next_platform_shape
+                .is_landed_on_platform(next_platform_transform.translation, landing_pos)
+        {
+            jump_state.falled = false;
+            if next_platform_shape
+                .is_landed_on_platform(next_platform_transform.translation, landing_pos)
+            {
+                // 分数加1
+                score.0 += 1;
+                score_up_queue.0.push(ScoreUpEvent {
+                    landing_pos: Vec3::new(landing_pos.x, landing_pos.y + 0.5, landing_pos.z),
+                });
+
+                commands
+                    .entity(next_platform_entity)
+                    .remove::<NextPlatform>();
+                commands
+                    .entity(next_platform_entity)
+                    .insert(CurrentPlatform);
+                commands
+                    .entity(current_platform_entity)
+                    .remove::<CurrentPlatform>();
+            }
+
+        // 蓄力不足或蓄力过度，角色摔落
+        } else {
+            jump_state.falled = true;
+            if current_platform_shape.is_touched_player(
+                current_platform_transform.translation,
+                landing_pos,
+                0.2,
+            ) {
+                info!("Player touched current platform");
+                let fall_direction = if landing_pos.x == player.translation.x {
+                    Vec3::NEG_X
+                } else {
+                    Vec3::NEG_Z
+                };
+                fall_state.animate_tilt_fall(landing_pos, fall_direction);
+            } else if next_platform_shape.is_touched_player(
+                next_platform_transform.translation,
+                landing_pos,
+                0.2,
+            ) {
+                info!("Player touched next platform");
+                let fall_direction = if landing_pos.x == player.translation.x {
+                    if landing_pos.z < next_platform_transform.translation.z {
+                        Vec3::NEG_X
+                    } else {
+                        Vec3::X
+                    }
+                } else {
+                    if landing_pos.x < next_platform_transform.translation.x {
+                        Vec3::Z
+                    } else {
+                        Vec3::NEG_Z
+                    }
+                };
+                fall_state.animate_tilt_fall(landing_pos, fall_direction);
+            } else {
+                fall_state.animate_straight_fall(landing_pos);
+            }
+        }
+
+        // 结束蓄力
+        accumulator.0 = None;
+        for sink in q_accumulation_sound.iter() {
+            sink.pause();
+        }
+    }
+}
+
+pub fn animate_jump(
+    mut commands: Commands,
+    mut jump_state: ResMut<JumpState>,
+    time: Res<Time>,
+    mut q_player: Query<&mut Transform, With<Player>>,
+    game_sounds: Res<GameSounds>,
+) {
+    if !jump_state.completed {
+        let mut player = q_player.single_mut();
+
+        // TODO 围绕中心点圆周?运动
+        let around_point = Vec3::new(
+            (jump_state.start_pos.x + jump_state.end_pos.x) / 2.0,
+            (jump_state.start_pos.y + jump_state.end_pos.y) / 2.0,
+            (jump_state.start_pos.z + jump_state.end_pos.z) / 2.0,
+        );
+
+        let rotate_axis = if (jump_state.end_pos.x - jump_state.start_pos.x) < 0.1 {
+            Vec3::X
+        } else {
+            Vec3::Z
+        };
+        let quat = Quat::from_axis_angle(
+            rotate_axis,
+            -(1.0 / jump_state.animation_duration) * PI * time.delta_secs(),
+        );
+
+        let mut clone_player = player.clone();
+        clone_player.translate_around(around_point, quat);
+        if clone_player.translation.y < INITIAL_PLAYER_POS.y {
+            player.translation = jump_state.end_pos;
+            player.rotation = Quat::IDENTITY;
+
+            // 结束跳跃
+            jump_state.completed = true;
+            if !jump_state.falled {
+                commands.spawn((
+                    AudioPlayer(game_sounds.success.clone()),
+                    PlaybackSettings::DESPAWN,
+                ));
+            }
+        } else {
+            player.translate_around(around_point, quat);
+
+            // 自身旋转
+            player.rotate_local_axis(
+                Dir3::new_unchecked(rotate_axis),
+                -(1.0 / jump_state.animation_duration) * TAU * time.delta_secs(),
+            );
+        }
+    }
+}
+
+// 角色蓄力效果
+// TODO 蓄力过程中保持与平台相接触
+pub fn animate_player_accumulation(
+    accumulator: Res<Accumulator>,
+    mut q_player: Query<&mut Transform, With<Player>>,
+    time: Res<Time>,
+) {
+    let mut player = q_player.single_mut();
+    match accumulator.0 {
+        Some(_) => {
+            player.scale.x = (player.scale.x + 0.12 * time.delta_secs()).min(1.3);
+            player.scale.y = (player.scale.y - 0.15 * time.delta_secs()).max(0.6);
+            player.scale.z = (player.scale.z + 0.12 * time.delta_secs()).min(1.3);
+        }
+        None => {
+            player.scale = Vec3::ONE;
+        }
+    }
+}
+
+pub fn animate_fall(
+    mut commands: Commands,
+    mut fall_state: ResMut<FallState>,
+    jump_state: Res<JumpState>,
+    time: Res<Time>,
+    mut next_game_state: ResMut<NextState<GameState>>,
+    mut q_player: Query<&mut Transform, With<Player>>,
+    game_sounds: Res<GameSounds>,
+) {
+    if !fall_state.completed && jump_state.completed {
+        if !fall_state.played_sound {
+            commands.spawn((
+                AudioPlayer(game_sounds.fall.clone()),
+                PlaybackSettings::DESPAWN,
+            ));
+            fall_state.played_sound = true;
+        }
+        let mut player = q_player.single_mut();
+        match fall_state.fall_type {
+            FallType::Straight => {
+                if player.translation.y < 0.5 {
+                    // 已摔落在地
+                    fall_state.completed = true;
+                    info!("Game over!");
+                    next_game_state.set(GameState::GameOver);
+                } else {
+                    player.translation.y -= 0.7 * time.delta_secs();
+                }
+            }
+            FallType::Tilt(direction) => {
+                if !fall_state.tilt_completed {
+                    // 倾斜
+                    let around_point = Vec3::new(
+                        fall_state.pos.x,
+                        INITIAL_PLAYER_POS.y - 0.5,
+                        fall_state.pos.z,
+                    );
+                    if player.translation.y < around_point.y {
+                        fall_state.tilt_completed = true;
+                    } else {
+                        let quat =
+                            Quat::from_axis_angle(direction, 1.0 * FRAC_PI_2 * time.delta_secs());
+                        player.rotate_around(around_point, quat);
+                    }
+                } else {
+                    // 下坠
+                    if player.translation.y < 0.2 {
+                        // 已摔落在地
+                        fall_state.completed = true;
+                        info!("Game over!");
+                        next_game_state.set(GameState::GameOver);
+                    } else {
+                        player.translation.y -= 0.7 * time.delta_secs();
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub fn animate_accumulation_particle_effect(
+    mut commands: Commands,
+    mut effects: ResMut<Assets<EffectAsset>>,
+    accumulator: Res<Accumulator>,
+    mut effect_timer: ResMut<GenerateAccumulationParticleEffectTimer>,
+    time: Res<Time>,
+    mut q_effect: Query<(Entity, &mut ParticleEffect, &mut Transform)>,
+    q_player: Query<&Transform, (With<Player>, Without<ParticleEffect>)>,
+) {
+    if accumulator.0.is_some() {
+        // 生成粒子特效
+        effect_timer.0.tick(time.delta());
+        if effect_timer.0.just_finished() {
+            let player = q_player.single();
+            let mut color_gradient = Gradient::new();
+            color_gradient.add_key(0.0, Vec4::new(4.0, 4.0, 4.0, 1.0));
+            color_gradient.add_key(0.1, Vec4::new(4.0, 4.0, 0.0, 1.0));
+            color_gradient.add_key(0.9, Vec4::new(4.0, 0.0, 0.0, 1.0));
+            color_gradient.add_key(1.0, Vec4::new(4.0, 0.0, 0.0, 0.0));
+
+            let mut size_gradient = Gradient::new();
+            size_gradient.add_key(0.0, Vec3::splat(0.05));
+            size_gradient.add_key(0.3, Vec3::splat(0.05));
+            size_gradient.add_key(1.0, Vec3::splat(0.0));
+
+            let name = format!("accumulation{}", time.elapsed_secs() as u32);
+            let mut module = Module::default();
+
+            let init_pos = SetPositionSphereModifier {
+                center: module.lit(player.translation),
+                radius: module.lit(1.0),
+                dimension: ShapeDimension::Volume,
+            };
+
+            let lifetime = module.lit(2.); // literal value "10.0"
+            let init_lifetime = SetAttributeModifier::new(Attribute::LIFETIME, lifetime);
+
+            let update_linear_drag = LinearDragModifier::constant(&mut module, 8.0);
+
+            // ConformToSphereModifier::new(
+            //     module.lit(player.translation),
+            //     module.lit(5.0),
+            //     module.lit(0.0),
+            //
+            //
+            // );
+            // let update_force_field = ForceFieldModifier::new(vec![ForceFieldSource {
+            //     position: player.translation,
+            //     max_radius: 10.0,
+            //     min_radius: 0.0,
+            //     mass: 6.0,
+            //     force_exponent: 0.3,
+            //     conform_to_sphere: false,
+            // }]);
+
+            let effect = effects.add(
+                EffectAsset::new(3, Spawner::once(3.0.into(), true), module)
+                    .init(init_pos)
+                    .init(init_lifetime)
+                    .update(update_linear_drag)
+                    // .update(update_force_field)
+                    .render(ColorOverLifetimeModifier {
+                        gradient: color_gradient.clone(),
+                    })
+                    .render(SizeOverLifetimeModifier {
+                        gradient: size_gradient.clone(),
+                        screen_space_size: false,
+                    }),
+            );
+            commands.spawn((
+                Name::new(name),
+                ParticleEffectBundle {
+                    effect: ParticleEffect::new(effect),
+                    transform: Transform::IDENTITY,
+                    ..Default::default()
+                },
+            ));
+
+            effect_timer.0.reset();
+        }
+    } else {
+        // 关闭粒子特效
+        for (entity, _, _) in &mut q_effect {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+pub fn clear_player(mut commands: Commands, q_player: Query<Entity, With<Player>>) {
+    for player in &q_player {
+        commands.entity(player).despawn();
+    }
+}
+
+pub fn prepare_jump(time: Res<Time>, mut prepare_timer: ResMut<PrepareJumpTimer>) {
+    prepare_timer.0.tick(time.delta());
+}
+
+pub fn reset_prepare_jump_timer(mut prepare_timer: ResMut<PrepareJumpTimer>) {
+    prepare_timer.0.reset();
+}
