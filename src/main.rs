@@ -87,6 +87,7 @@ fn main() {
             OnEnter(GameState::MainMenu),
             (
                 setup_main_menu,     // 设置主菜单UI元素
+                clear_player,        // 清除可能存在的玩家实体
                 clear_platforms,     // 清除可能存在的平台实体
                 despawn_scoreboard,  // 清除可能存在的计分板UI
             ),
@@ -107,11 +108,14 @@ fn main() {
             // 进入游戏进行状态时执行的一次性系统
             OnEnter(GameState::Playing),
             (
+                clear_player,                   // 清除旧的玩家实体
                 clear_platforms,                // 清除旧的平台实体
                 despawn_scoreboard,             // 清除旧的计分板
                 setup_first_platform.after(clear_platforms), // 设置第一个平台（注意依赖关系）
+                setup_player.after(clear_player),           // 设置玩家（注意依赖关系）
                 setup_scoreboard.after(despawn_scoreboard), // 设置计分板（注意依赖关系）
                 reset_score,                    // 重置分数为0
+                reset_prepare_jump_timer,       // 重置准备跳跃计时器
             ),
         )
         .add_systems(
@@ -119,9 +123,15 @@ fn main() {
             Update,
             (
                 // 游戏核心逻辑系统，按特定顺序执行
+                prepare_jump,                      // 更新准备跳跃计时器
                 generate_next_platform,            // 生成下一个平台
                 move_camera,                       // 相机跟随玩家移动
+                player_jump,                       // 玩家跳跃核心逻辑
                 update_scoreboard,                 // 更新分数显示
+                animate_jump,                      // 执行跳跃动画
+                animate_fall,                      // 执行摔落动画（如果需要）
+                animate_player_accumulation,       // 玩家蓄力视觉效果
+                animate_platform_accumulation.after(player_jump), // 平台蓄力效果（依赖跳跃逻辑）
                 spawn_score_up_effect,             // 生成得分上升效果
                 sync_score_up_effect,              // 同步得分效果位置到屏幕坐标
                 shift_score_up_effect,             // 处理得分效果的上移动画
@@ -146,6 +156,12 @@ fn main() {
             (despawn_screen::<OnGameOverMenuScreen>,), // 移除游戏结束菜单UI
         );
 
+    // 仅在非Web平台添加粒子效果动画系统
+    // 为蓄力效果提供视觉反馈
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        app.add_systems(Update, animate_accumulation_particle_effect);
+    }
 
     // 启动游戏主循环，开始运行所有注册的系统
     app.run();
