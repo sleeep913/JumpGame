@@ -206,7 +206,7 @@ pub fn setup_scoreboard(mut commands: Commands, asset_server: Res<AssetServer>) 
         ))
         .with_child(( // 分数值文本子元素
             TextSpan::new("0"), // 初始分数
-            TextColor(Color::srgb(1.0, 0.5, 0.5)), // 分数颜色
+            TextColor(Color::BLACK), // 分数颜色
             TextFont { // 字体设置
                 font: asset_server.load("fonts/num.ttf"),
                 font_size: 40.0,
