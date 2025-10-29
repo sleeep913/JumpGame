@@ -191,7 +191,7 @@ pub fn setup_scoreboard(mut commands: Commands, asset_server: Res<AssetServer>) 
     commands
         .spawn((
             Text::new("Score: "), // 分数标签文本
-            TextColor(Color::srgb(0.5, 0.5, 1.0)), // 文本颜色
+            TextColor(Color::BLACK), // 文本颜色
             TextFont { // 文本字体设置
                 font: asset_server.load("fonts/num.ttf"),
                 font_size: 40.0,
